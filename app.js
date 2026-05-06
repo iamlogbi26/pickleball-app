@@ -3,20 +3,16 @@ import "./App.css";
 
 export default function App() {
   // ----------------------------
-  // STATE
+  // STATES
   // ----------------------------
   const [players, setPlayers] = useState([]);
   const [name, setName] = useState("");
 
-  const [queue, setQueue] = useState([]);
   const [currentMatch, setCurrentMatch] = useState(null);
   const [history, setHistory] = useState([]);
 
-  const [phase, setPhase] = useState("rotation"); 
-  // rotation | finals
-
   // ----------------------------
-  // ADD PLAYER
+  // ADD PLAYER (FIXED)
   // ----------------------------
   const addPlayer = () => {
     if (!name.trim()) return;
@@ -25,11 +21,10 @@ export default function App() {
       id: Date.now(),
       name: name.trim(),
       played: 0,
-      partners: []
+      wins: 0
     };
 
-    setPlayers([...players, newPlayer]);
-    setQueue([...queue, newPlayer]);
+    setPlayers(prev => [...prev, newPlayer]); // ✅ FIXED SAFE UPDATE
     setName("");
   };
 
@@ -37,36 +32,21 @@ export default function App() {
   // REMOVE PLAYER
   // ----------------------------
   const removePlayer = (id) => {
-    setPlayers(players.filter(p => p.id !== id));
-    setQueue(queue.filter(p => p.id !== id));
+    setPlayers(prev => prev.filter(p => p.id !== id));
   };
 
   // ----------------------------
-  // CREATE MATCH (NO REPEAT PARTNER LOGIC - SIMPLE VERSION)
+  // START MATCH (SIMPLE SAFE VERSION)
   // ----------------------------
   const createMatch = () => {
-    if (queue.length < 4) return;
+    if (players.length < 4) return alert("Need at least 4 players");
 
-    const available = [...queue];
+    const shuffled = [...players].sort(() => Math.random() - 0.5);
 
-    const pick = () => {
-      return available.splice(0, 1)[0];
-    };
+    const team1 = [shuffled[0], shuffled[1]];
+    const team2 = [shuffled[2], shuffled[3]];
 
-    const p1 = pick();
-    const p2 = pick();
-    const p3 = pick();
-    const p4 = pick();
-
-    const team1 = [p1, p2];
-    const team2 = [p3, p4];
-
-    setQueue(available);
-
-    setCurrentMatch({
-      team1,
-      team2
-    });
+    setCurrentMatch({ team1, team2 });
   };
 
   // ----------------------------
@@ -78,93 +58,33 @@ export default function App() {
       winner: winningTeam
     };
 
-    setHistory([...history, match]);
+    setHistory(prev => [...prev, match]);
 
-    // update stats
-    const updatePlayers = (team, win) => {
-      return team.map(p => ({
-        ...p,
-        played: p.played + 1,
-        wins: p.wins || 0 + (win ? 1 : 0)
-      }));
-    };
-
-    const updatedPlayers = players.map(p => {
+    const updated = players.map(p => {
       const inTeam1 = currentMatch.team1.find(x => x.id === p.id);
       const inTeam2 = currentMatch.team2.find(x => x.id === p.id);
 
       if (inTeam1) {
-        const win = winningTeam === "team1";
         return {
           ...p,
           played: p.played + 1,
-          wins: (p.wins || 0) + (win ? 1 : 0)
+          wins: p.wins + (winningTeam === "team1" ? 1 : 0)
         };
       }
 
       if (inTeam2) {
-        const win = winningTeam === "team2";
         return {
           ...p,
           played: p.played + 1,
-          wins: (p.wins || 0) + (win ? 1 : 0)
+          wins: p.wins + (winningTeam === "team2" ? 1 : 0)
         };
       }
 
       return p;
     });
 
-    setPlayers(updatedPlayers);
-
+    setPlayers(updated);
     setCurrentMatch(null);
-
-    // check if all played
-    const allPlayed = updatedPlayers.every(p => p.played > 0);
-
-    if (allPlayed && phase === "rotation") {
-      generateFinalPhase(history.concat(match));
-      setPhase("finals");
-    }
-  };
-
-  // ----------------------------
-  // FINAL PHASE LOGIC
-  // winners vs winners / losers vs losers
-  // ----------------------------
-  const generateFinalPhase = (allMatches) => {
-    const winners = [];
-    const losers = [];
-
-    allMatches.forEach(m => {
-      if (m.winner === "team1") {
-        winners.push(...m.team1);
-        losers.push(...m.team2);
-      } else {
-        winners.push(...m.team2);
-        losers.push(...m.team1);
-      }
-    });
-
-    const pair = (arr) => {
-      const result = [];
-      for (let i = 0; i < arr.length; i += 4) {
-        if (arr[i + 3]) {
-          result.push({
-            team1: [arr[i], arr[i + 1]],
-            team2: [arr[i + 2], arr[i + 3]]
-          });
-        }
-      }
-      return result;
-    };
-
-    const finalMatches = {
-      winnerBracket: pair(winners),
-      loserBracket: pair(losers)
-    };
-
-    setQueue([]);
-    setCurrentMatch(finalMatches.winnerBracket[0] || null);
   };
 
   // ----------------------------
@@ -172,10 +92,10 @@ export default function App() {
   // ----------------------------
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
-      <h1>🥒 Pickleball Rotation App</h1>
+      <h1>🥒 Pickleball App v1.1 (Fixed)</h1>
 
       {/* ADD PLAYER */}
-      <div>
+      <div style={{ marginBottom: 10 }}>
         <input
           value={name}
           placeholder="Enter player name"
@@ -188,8 +108,8 @@ export default function App() {
       <h3>Players</h3>
       {players.map(p => (
         <div key={p.id}>
-          {p.name} (Played: {p.played})
-          <button onClick={() => removePlayer(p.id)}>X</button>
+          {p.name} | Played: {p.played} | Wins: {p.wins}
+          <button onClick={() => removePlayer(p.id)}>❌</button>
         </div>
       ))}
 
@@ -224,7 +144,7 @@ export default function App() {
       )}
 
       {/* HISTORY */}
-      <h3>Match History</h3>
+      <h3>History</h3>
       {history.map((m, i) => (
         <div key={i}>
           Team1 vs Team2 → Winner: {m.winner}
